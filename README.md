@@ -3,7 +3,7 @@
 
 **Roboshop Devop CI**
 
-<img width="956" height="498" alt="image" src="https://github.com/user-attachments/assets/154d1b37-3414-4c88-959b-5bb6c8b4e8b1" />
+
 
 
 
@@ -69,10 +69,7 @@ user ecr/dockhub/acr image with required version in manifest/deploymnt image, ne
 **frontend Infra:**
 
 
-<img width="951" height="440" alt="image" src="https://github.com/user-attachments/assets/1c224456-7ced-4467-b060-7224a8d21045" />
 
-
-<img width="953" height="470" alt="image" src="https://github.com/user-attachments/assets/3af45447-0c4e-4a3b-9890-c638526fb099" />
 
 
 
@@ -96,9 +93,7 @@ user ecr/dockhub/acr image with required version in manifest/deploymnt image, ne
 
 **user Infra:**
 
-<img width="945" height="466" alt="image" src="https://github.com/user-attachments/assets/0567519b-1f1b-42d4-b39c-0bee88f1f393" />
 
-<img width="944" height="466" alt="image" src="https://github.com/user-attachments/assets/e973a0ee-06b3-4578-a839-6f230965148b" />
 
 Jenkins server and jenkins nodejs agent/Azuredevops with self runner.(build,SAST,Docker build image, push image ecr/acr/dockerhub ecr/acr/dockerhub registery,trivy scan/aws ecr scan/dockerhub image scan)
 
@@ -116,9 +111,7 @@ user ecr/dockhub/acr image with required version in manifest/deploymnt image, ne
 
 **catalogue Infra:**
 
-<img width="955" height="467" alt="image" src="https://github.com/user-attachments/assets/3d423363-bda5-4f7d-bcad-df66bdb13b9e" />
 
-<img width="952" height="472" alt="image" src="https://github.com/user-attachments/assets/26460571-ecca-4407-9c1c-8890d9549c2e" />
 
 
 
@@ -138,9 +131,7 @@ user ecr/dockhub/acr image with required version in manifest/deploymnt image, ne
 
 **cart Infra:**
 
-<img width="959" height="472" alt="image" src="https://github.com/user-attachments/assets/59431233-7cf0-4251-9e21-baa26fe4b875" />
 
-<img width="955" height="473" alt="image" src="https://github.com/user-attachments/assets/26d8941f-1caa-4a18-91f0-ae5da333753b" />
 
 
 
@@ -161,9 +152,6 @@ github repo for delivery/deployment:  https://github.com/iam-vanimina/shipping-a
 
 **shipping Infra:**
 
-<img width="957" height="471" alt="image" src="https://github.com/user-attachments/assets/5ceff13d-fbe9-4999-995a-60f2e4e9e0ce" />
-
-<img width="958" height="476" alt="image" src="https://github.com/user-attachments/assets/9f8fe5d0-717a-4582-9ff4-5077a0ca1cf9" />
 
 
 Jenkins server/azuredevops and jenkins agent/self runner agent.(build,SAST,Docker build image, push image ecr/acr/dockerhub 
@@ -185,9 +173,7 @@ github repo for delivery/deployment:  https://github.com/iam-vanimina/payment-ar
 **payment Infra:**
 
 
-<img width="959" height="447" alt="image" src="https://github.com/user-attachments/assets/3014b115-0f1a-4168-8ba6-1b9e8edcf62a" />
 
-<img width="956" height="475" alt="image" src="https://github.com/user-attachments/assets/a7adafd8-fd14-4c33-aac2-2aaa2df46f0c" />
 
 
 Jenkins server/azuredevops and jenkins agent/self runner agent.(build,SAST,Docker build image, push image ecr/acr/dockerhub 
@@ -209,9 +195,7 @@ github repo for delivery/deployment:  https://github.com/iam-vanimina/dispatch-a
 
 **dispatch Infra:**
 
-<img width="947" height="472" alt="image" src="https://github.com/user-attachments/assets/5db11835-7fd5-450c-9509-3478fcef29e2" />
 
-<img width="957" height="469" alt="image" src="https://github.com/user-attachments/assets/61824c43-c805-4e0c-bd13-25595665c910" />
 
 
 Jenkins server/azuredevops and jenkins agent/self runner agent.(build,SAST,Docker build image, push image ecr/acr/dockerhub 
