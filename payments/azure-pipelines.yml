@@ -1,0 +1,23 @@
+trigger:
+  branches:
+    include:
+      - '*'
+
+pr:
+  branches:
+    include:
+      - '*'
+
+resources:
+  repositories:
+    - repository: templates
+      type: git
+      name: roboshop/roboshop-shared-templates
+      ref: refs/heads/main
+
+extends:
+  template: templates/python-azure-pipeline.yml@templates
+  parameters:
+    project: 'roboshop'
+    component: 'payments'
+    deploy: false

@@ -1,0 +1,8 @@
+pyuwsgi
+Flask
+requests
+pika
+prometheus_client
+opentracing
+instana
+#uwsgi==2.0.31
