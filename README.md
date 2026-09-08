@@ -227,7 +227,10 @@ k8s cluster for deployment EKS/Docker desktop/AKS/GKS:
 
 DEV,QA/UAT, Stage
 
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+In this roboshop ci project pushed the docker images to docker hub registry namespace vanimina to specific repository as per each microservice respectively.  Later on we will use these docker images for roboshop argocd deployments.
 
+<img width="959" height="469" alt="image" src="https://github.com/user-attachments/assets/7b4e2d36-4d19-4bf1-b647-3251f915f489" />
 
 
 
