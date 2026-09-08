@@ -1,7 +1,7 @@
 
 **Azuredevops ci for roboshop application** 
 
-**Roboshop Devop CI**
+**Roboshop Devops CI**
 
 
 <img width="950" height="470" alt="image" src="https://github.com/user-attachments/assets/c8f1435d-3ec1-4d06-8f6f-706662296d8d" />
