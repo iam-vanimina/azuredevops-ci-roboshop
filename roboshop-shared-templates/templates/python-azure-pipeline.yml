@@ -1,0 +1,422 @@
+parameters:
+  - name: deploy
+    displayName: Deploy
+    type: boolean
+    default: false
+  - name: project
+    displayName: Project
+    type: string
+  - name: component
+    displayName: Component
+    type: string
+
+
+variables:
+  PROJECT: ${{ parameters.project }}
+  COMPONENT: ${{ parameters.component }}
+
+  DOCKER_USERNAME: 'vanimina'
+
+  PYTHON_VERSION: '3.11'
+
+
+stages:
+
+# ============================================================
+# READ VERSION
+# ============================================================
+
+- stage: ReadVersion
+  displayName: Read Version
+  condition: ne(variables['Build.SourceBranch'], 'refs/heads/main')
+
+  jobs:
+    - job: ReadVersion
+      displayName: Read package.json version
+      pool:
+         name: 'AGENT-2'
+
+      steps:
+
+        - checkout: self
+
+        - bash: |
+            set -e
+
+            VERSION=$(node -p "require('./package.json').version")
+
+            echo "Version is: $VERSION"
+
+            echo "##vso[task.setvariable variable=APP_VERSION;isOutput=true]$VERSION"
+          name: getVersion
+          displayName: Read application version
+          
+# ============================================================
+# PYTHON BUILD / TEST
+# ============================================================
+
+- stage: Compile
+
+  displayName: Python Build and Test
+
+  condition: ne(variables['Build.SourceBranch'], 'refs/heads/main')
+
+  dependsOn:
+    - ReadVersion
+
+  jobs:
+
+    - job: Compile
+
+      displayName: Build Python Application
+
+      pool:
+        name: 'AGENT-2'
+
+      steps:
+
+        - checkout: self
+
+
+        # ====================================================
+        # PYTHON VERSION
+        # ====================================================
+
+        - bash: |
+            set -e
+
+            echo "Checking Python..."
+
+            python3 --version
+            pip3 --version
+
+          displayName: Verify Python
+
+
+        # ====================================================
+        # CREATE VIRTUAL ENVIRONMENT
+        # ====================================================
+
+        - bash: |
+            set -e
+
+            echo "Creating Python virtual environment..."
+
+            #python3 -m venv .venv
+
+            #source .venv/bin/activate
+
+            python --version
+            pip --version
+
+            #python -m pip install --upgrade pip setuptools wheel
+
+          displayName: Create Python Virtual Environment
+
+
+        # ====================================================
+        # INSTALL DEPENDENCIES
+        # ====================================================
+
+        - bash: |
+            set -e
+
+            #source .venv/bin/activate
+
+            echo "Installing Python dependencies..."
+
+            if [ -f "requirements.txt" ]; then
+
+             #pip3.11 install -r requirements.txt
+             pip install -r requirements.txt
+             
+
+            else
+
+              echo "requirements.txt not found"
+
+            fi
+
+          displayName: Install Python Dependencies
+
+
+        # ====================================================
+        # BUILD
+        # ====================================================
+
+        - bash: |
+            set -e
+
+            #source .venv/bin/activate
+
+            echo "Building Python application..."
+
+            #if [ -f "setup.py" ]; then
+
+            #  python setup.py build
+
+            #elif [ -f "pyproject.toml" ]; then
+
+            #  python -m build
+
+            #else
+
+             # echo "No setup.py or pyproject.toml found."
+             # echo "Python application does not require package build."
+
+            #fi
+
+          displayName: Python Build
+
+
+        # ====================================================
+        # UNIT TESTS
+        # ====================================================
+
+        - bash: |
+            set -e
+
+            #source .venv/bin/activate
+
+            echo "Running Python unit tests..."
+
+            if [ -d "tests" ]; then
+
+              python -m pytest tests
+
+            else
+
+              echo "tests directory not found."
+
+            fi
+
+          displayName: Python Unit Tests
+
+
+# ============================================================
+# DOCKER BUILD + PUSH
+# ============================================================
+
+- stage: DockerBuild
+
+  displayName: Docker Build and Push
+
+  condition: ne(variables['Build.SourceBranch'], 'refs/heads/main')
+
+  dependsOn:
+    - ReadVersion
+    - Compile
+
+  variables:
+
+    APP_VERSION: $[ stageDependencies.ReadVersion.ReadVersion.outputs['getVersion.APP_VERSION'] ]
+
+  jobs:
+
+    - job: DockerBuild
+
+      displayName: Build Docker Image
+
+      pool:
+        name: 'AGENT-2'
+
+      steps:
+
+        - checkout: self
+
+
+        # ====================================================
+        # DISPLAY VERSION
+        # ====================================================
+
+        - bash: |
+
+            echo "======================================"
+            echo "Project   : $(PROJECT)"
+            echo "Component : $(COMPONENT)"
+            echo "Version   : $(APP_VERSION)"
+            echo "======================================"
+
+          displayName: Display Build Information
+
+
+        # ====================================================
+        # DOCKER LOGIN
+        # ====================================================
+
+        - bash: |
+
+            set -e
+
+            echo "Logging into Docker Hub..."
+
+            echo "$(DOCKER_PASSWORD)" | docker login \
+              -u "$(DOCKER_USERNAME)" \
+              --password-stdin
+
+          displayName: Login to Docker Hub
+
+
+        # ====================================================
+        # FIND DOCKERFILE
+        # ====================================================
+
+        - bash: |
+
+            set -e
+
+            echo "Current directory:"
+            pwd
+
+            echo "Repository files:"
+            ls -la
+
+            echo "Dockerfiles:"
+            find . -name Dockerfile -type f
+
+          displayName: Find Dockerfile
+
+
+        # ====================================================
+        # DOCKER BUILD
+        # ====================================================
+
+        - bash: |
+
+            set -e
+
+            IMAGE="$(DOCKER_USERNAME)/$(COMPONENT):$(APP_VERSION)"
+
+            echo "======================================"
+            echo "Building Docker Image"
+            echo "IMAGE: $IMAGE"
+            echo "======================================"
+
+            docker build \
+              -t "$IMAGE" \
+              .
+
+          displayName: Docker Build
+
+
+        # ====================================================
+        # DOCKER PUSH
+        # ====================================================
+
+        - bash: |
+
+            set -e
+
+            IMAGE="$(DOCKER_USERNAME)/$(COMPONENT):$(APP_VERSION)"
+
+            echo "======================================"
+            echo "Pushing Docker Image"
+            echo "IMAGE: $IMAGE"
+            echo "======================================"
+
+            docker push "$IMAGE"
+
+          displayName: Docker Push
+
+
+# ============================================================
+# DEPLOY
+# ============================================================
+
+- stage: Deploy
+
+  displayName: Trigger Deployment
+
+  dependsOn:
+    - DockerBuild
+
+  condition: >
+    and(
+      succeeded(),
+      ne(variables['Build.SourceBranch'], 'refs/heads/main'),
+      eq('${{ parameters.deploy }}', true)
+    )
+
+  variables:
+
+    APP_VERSION: $[ stageDependencies.ReadVersion.ReadVersion.outputs['getVersion.APP_VERSION'] ]
+
+  jobs:
+
+    - job: TriggerDeploy
+
+      displayName: Trigger CD Pipeline
+
+      pool:
+        name: 'AGENT-2'
+
+      steps:
+
+        - bash: |
+
+            echo "======================================"
+            echo "Deployment enabled"
+            echo "Project   : $(PROJECT)"
+            echo "Component : $(COMPONENT)"
+            echo "Version   : $(APP_VERSION)"
+            echo "======================================"
+
+            # Trigger Azure DevOps CD pipeline here.
+            #
+            # Example:
+            #
+            # az pipelines run \
+            #   --name "$(COMPONENT)-cd" \
+            #   --parameters \
+            #       version="$(APP_VERSION)" \
+            #       project="$(PROJECT)" \
+            #       component="$(COMPONENT)"
+
+          displayName: Trigger CD Pipeline
+
+
+# ============================================================
+# CLEANUP
+# ============================================================
+
+- stage: Cleanup
+
+ 
+  displayName: Cleanup
+
+  dependsOn:
+    - ReadVersion
+    - Compile
+    - DockerBuild
+    - Deploy
+
+  condition: >
+    and(
+      succeeded(),
+      ne(variables['Build.SourceBranch'], 'refs/heads/main'),
+      eq('${{ parameters.deploy }}', true)
+    )
+
+
+
+  jobs:
+
+    - job: Cleanup
+
+      displayName: Cleanup Workspace
+
+      pool:
+        name: 'AGENT-2'
+
+      steps:
+
+        - bash: |
+
+            echo "======================================"
+            echo "Pipeline completed"
+            echo "Cleaning workspace..."
+            echo "======================================"
+
+            git clean -fdx || true
+
+          displayName: Cleanup Workspace

@@ -1,0 +1,381 @@
+parameters:
+  - name: deploy
+    displayName: Deploy
+    type: boolean
+    default: false
+
+  - name: project
+    displayName: Project
+    type: string
+
+  - name: component
+    displayName: Component
+    type: string
+
+
+variables:
+  PROJECT: ${{ parameters.project }}
+  COMPONENT: ${{ parameters.component }}
+  DOCKER_USERNAME: 'vanimina'
+  #AWS_ACCOUNT_ID: '390663897550'
+  #AWS_REGION: 'ap-south-1'
+  #ECR_REGISTRY: '390663897550.dkr.ecr.ap-south-1.amazonaws.com'
+
+
+stages:
+
+# ============================================================
+# READ VERSION
+# ============================================================
+
+- stage: ReadVersion
+  displayName: Read Version
+  condition: ne(variables['Build.SourceBranch'], 'refs/heads/main')
+
+  jobs:
+    - job: ReadVersion
+      displayName: Read package.json version
+      pool:
+         name: 'AGENT-2'
+
+      steps:
+
+        - checkout: self
+
+        - bash: |
+            set -e
+
+            VERSION=$(node -p "require('./package.json').version")
+
+            echo "Version is: $VERSION"
+
+            echo "##vso[task.setvariable variable=APP_VERSION;isOutput=true]$VERSION"
+          name: getVersion
+          displayName: Read application version
+
+# ============================================================
+# COMPILE / TEST
+# ============================================================
+
+- stage: Compile
+  displayName: Compile and Test
+
+  condition: ne(variables['Build.SourceBranch'], 'refs/heads/main')
+
+  dependsOn:
+    - ReadVersion
+
+  jobs:
+
+    - job: Compile
+
+      displayName: Go Build and Test
+
+      pool:
+        name: 'AGENT-2'
+
+      steps:
+
+        - checkout: self
+
+
+        # ====================================================
+        # SETUP GO
+        # ====================================================
+
+       # - task: GoTool@0
+       #   displayName: Setup Go
+       #   inputs:
+       #     version: '1.24'
+
+
+        # ====================================================
+        # DOWNLOAD DEPENDENCIES
+        # ====================================================
+
+        - bash: |
+            set -e
+            go mod init dispatch
+            echo "Go version:"
+            go version
+            go mod tidy
+            echo "Downloading Go dependencies..."
+
+        - bash: |
+           
+           if [ -f "go.mod" ]; then
+            echo "go.mod found"
+            go mod download
+           else
+            echo "ERROR: go.mod not found"
+            exit 1
+           fi
+
+          displayName: Download Go Dependencies
+
+
+        # ====================================================
+        # VERIFY DEPENDENCIES
+        # ====================================================
+
+        - bash: |
+            set -e
+
+            echo "Verifying Go dependencies..."
+
+            go mod verify
+
+          displayName: Verify Go Dependencies
+
+
+        # ====================================================
+        # UNIT TESTS
+        # ====================================================
+
+        - bash: |
+            set -e
+
+            echo "Running Go unit tests..."
+
+            go test ./...
+
+          displayName: Unit Tests
+
+
+        # ====================================================
+        # GO VET
+        # ====================================================
+
+        - bash: |
+            set -e
+
+            echo "Running go vet..."
+
+            go vet ./...
+
+          displayName: Go Vet
+
+
+        # ====================================================
+        # BUILD
+        # ====================================================
+
+        - bash: |
+            set -e
+
+            echo "Building Go application..."
+
+            go build -o $(Build.SourcesDirectory)/app .
+
+            echo "Build completed."
+
+            ls -lh $(Build.SourcesDirectory)/app
+
+          displayName: Go Build
+
+
+# ============================================================
+# DOCKER BUILD + PUSH TO AWS ECR
+# ============================================================
+
+- stage: DockerBuild
+  displayName: Docker Build and Push
+
+  condition: ne(variables['Build.SourceBranch'], 'refs/heads/main')
+
+  dependsOn:
+    - ReadVersion
+    - Compile
+
+  variables:
+
+    APP_VERSION: $[ stageDependencies.ReadVersion.ReadVersion.outputs['getVersion.APP_VERSION'] ]
+
+  jobs:
+
+    - job: DockerBuild
+
+      displayName: Build Docker Image
+
+      pool:
+        name: 'AGENT-2'
+
+      steps:
+
+        - checkout: self
+
+
+        # ====================================================
+        # CHECK VERSION
+        # ====================================================
+
+        - bash: |
+            set -e
+
+            echo "Application version: $(APP_VERSION)"
+            echo "Project: $(PROJECT)"
+            echo "Component: $(COMPONENT)"
+
+          displayName: Display Build Information
+
+
+        # ====================================================
+        # AWS ECR LOGIN
+        # ====================================================
+
+        - bash: |
+            set -e
+
+            #echo "Logging into AWS ECR..."
+
+            #aws ecr get-login-password \
+            #  --region "$(AWS_REGION)" \
+            #  | docker login \
+            #  --username AWS \
+            #  --password-stdin "$(ECR_REGISTRY)"
+
+          #displayName: Login to AWS ECR
+         # ====================================================
+        # DOCKER LOGIN
+        # ====================================================
+
+        - bash: |
+
+            set -e
+
+            echo "Logging into Docker Hub..."
+
+            echo "$(DOCKER_PASSWORD)" | docker login \
+              -u "$(DOCKER_USERNAME)" \
+              --password-stdin
+
+          displayName: Login to Docker Hub  
+
+
+        # ====================================================
+        # DOCKER BUILD
+        # ====================================================
+
+        - bash: |
+            set -e
+
+            #IMAGE="$(ECR_REGISTRY)/$(PROJECT)/$(COMPONENT):$(APP_VERSION)"
+             IMAGE="$(DOCKER_USERNAME)/$(COMPONENT):$(APP_VERSION)"
+            echo "Building Docker image:"
+            echo "$IMAGE"
+
+            docker build \
+              -t "$IMAGE" \
+              .
+
+          displayName: Docker Build
+
+
+        # ====================================================
+        # DOCKER PUSH
+        # ====================================================
+
+        - bash: |
+            set -e
+
+            #IMAGE="$(ECR_REGISTRY)/$(PROJECT)/$(COMPONENT):$(APP_VERSION)"
+            IMAGE="$(DOCKER_USERNAME)/$(COMPONENT):$(APP_VERSION)"
+            echo "Pushing Docker image:"
+            echo "$IMAGE"
+
+            docker push "$IMAGE"
+
+          displayName: Docker Push
+
+
+# ============================================================
+# DEPLOY
+# ============================================================
+
+- stage: Deploy
+  displayName: Trigger Deployment
+
+  dependsOn:
+    - DockerBuild
+
+  condition: >
+    and(
+      succeeded(),
+      ne(variables['Build.SourceBranch'], 'refs/heads/main'),
+      eq('${{ parameters.deploy }}', true)
+    )
+
+  variables:
+
+    APP_VERSION: $[ stageDependencies.ReadVersion.ReadVersion.outputs['APP_VERSION'] ]
+
+  jobs:
+
+    - job: TriggerDeploy
+
+      displayName: Trigger CD Pipeline
+
+      pool:
+        name: 'AGENT-2'
+
+      steps:
+
+        - bash: |
+            set -e
+
+            echo "Deployment enabled"
+            echo "Project: $(PROJECT)"
+            echo "Component: $(COMPONENT)"
+            echo "Version: $(APP_VERSION)"
+
+            # Trigger Azure DevOps CD pipeline here.
+            #
+            # Example:
+            #
+            # az pipelines run \
+            #   --name "$(COMPONENT)-cd" \
+            #   --parameters version="$(APP_VERSION)"
+
+          displayName: Trigger CD Pipeline
+
+
+# ============================================================
+# CLEANUP
+# ============================================================
+
+- stage: Cleanup
+
+  displayName: Cleanup
+
+  dependsOn:
+    - ReadVersion
+    - Compile
+    - DockerBuild
+    - Deploy
+
+  condition: >
+    and(
+      succeeded(),
+      ne(variables['Build.SourceBranch'], 'refs/heads/main'),
+      eq('${{ parameters.deploy }}', true)
+    )
+
+
+  jobs:
+
+    - job: Cleanup
+
+      displayName: Cleanup Workspace
+
+      pool:
+        name: 'AGENT-2'
+
+      steps:
+
+        - bash: |
+            echo "Pipeline completed."
+            echo "Cleaning workspace..."
+
+            git clean -fdx || true
+
+          displayName: Cleanup Workspace

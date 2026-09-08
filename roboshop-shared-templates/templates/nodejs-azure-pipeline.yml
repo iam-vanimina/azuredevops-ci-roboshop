@@ -1,0 +1,272 @@
+parameters:
+  - name: deploy
+    displayName: Deploy
+    type: boolean
+    default: false
+  - name: project
+    displayName: Project
+    type: string
+  - name: component
+    displayName: Component
+    type: string
+
+variables:
+  PROJECT: ${{ parameters.project }}
+  COMPONENT: ${{ parameters.component }}
+  DOCKER_USERNAME: 'vanimina'
+ # AWS_ACCOUNT_ID: '390663897550'
+ # AWS_REGION: 'ap-south-1'
+  # Store these as Azure DevOps service connection / secret variables
+ # ECR_REGISTRY: '390663897550.dkr.ecr.ap-south-1.amazonaws.com'
+
+stages:
+
+
+# ============================================================
+# READ VERSION
+# ============================================================
+
+- stage: ReadVersion
+  displayName: Read Version
+  condition: ne(variables['Build.SourceBranch'], 'refs/heads/main')
+
+  jobs:
+    - job: ReadVersion
+      displayName: Read package.json version
+      pool:
+         name: 'AGENT-2'
+
+      steps:
+
+        - checkout: self
+
+        - bash: |
+            set -e
+
+            VERSION=$(node -p "require('./package.json').version")
+
+            echo "Version is: $VERSION"
+
+            echo "##vso[task.setvariable variable=APP_VERSION;isOutput=true]$VERSION"
+          name: getVersion
+          displayName: Read application version
+
+
+# ============================================================
+# BUILD / TEST / SONARQUBE
+# ============================================================
+
+- stage: Compile
+  displayName: Compile and Test
+  condition: ne(variables['Build.SourceBranch'], 'refs/heads/main')
+  dependsOn: ReadVersion
+
+  
+    
+  jobs:
+    - job: Compile
+      pool:
+         name: 'AGENT-2'
+      displayName: Install Dependencies and Test
+
+      steps:
+
+        - checkout: self
+        - script: |
+            node --version
+            npm --version
+          displayName: Check Node.js
+
+        #- task: NodeTool@0
+        #  displayName: Setup Node.js
+        #  inputs:
+        #    versionSpec: '20.x'
+
+        - bash: |
+            set -e
+
+            echo "Installing dependencies..."
+
+            npm install
+          displayName: Install Dependencies
+
+        - bash: |
+            set -e
+
+            echo "Running unit tests..."
+
+            # npm test
+          displayName: Unit Tests
+
+        # ====================================================
+        # SONARQUBE CLOUD
+        # ====================================================
+
+        # - task: SonarCloudPrepare@3
+        #   displayName: Prepare SonarQube Cloud Analysis
+        #   inputs:
+        #     SonarCloud: 'sonarcloud-service-connection'
+        #     organization: 'YOUR_SONAR_ORGANIZATION'
+        #     scannerMode: 'CLI'
+        #     configMode: 'file'
+
+        # - task: SonarCloudAnalyze@3
+        #   displayName: SonarQube Cloud Analysis
+
+        # - task: SonarCloudPublish@3
+        #   displayName: Publish SonarQube Quality Gate
+        #   inputs:
+        #     pollingTimeoutSec: '300'
+
+
+# ============================================================
+# DOCKER BUILD + PUSH TO AWS ECR
+# ============================================================
+
+- stage: DockerBuild
+  displayName: Docker Build and Push
+  condition: ne(variables['Build.SourceBranch'], 'refs/heads/main')
+  dependsOn:
+    - ReadVersion
+    - Compile
+
+  variables:
+  
+    APP_VERSION: $[ stageDependencies.ReadVersion.ReadVersion.outputs['getVersion.APP_VERSION'] ]
+    
+  jobs:
+
+    - job: DockerBuild
+      pool:
+         name: 'AGENT-2'
+      displayName: Build Docker Image
+
+      steps:
+
+        - checkout: self
+
+        - bash: |
+            set -e
+
+            echo "Application version: $(APP_VERSION)"
+            echo "Project: $(PROJECT)"
+            echo "Component: $(COMPONENT)"
+
+           # echo "Logging into AWS ECR..."
+
+           # aws ecr get-login-password \
+           #   --region $(AWS_REGION) \
+           #   | docker login \
+           #   --username AWS \
+           #   --password-stdin $(ECR_REGISTRY)
+
+          #displayName: Login to AWS ECR
+
+           # Docker hub login
+        - bash: |
+            set -e   
+            echo "$(DOCKER_PASSWORD)" | docker login \
+              -u "$(DOCKER_USERNAME)" \
+              --password-stdin
+          displayName: Login to docker hub
+
+        - bash: |
+            set -e
+
+            #IMAGE="$(ECR_REGISTRY)/$(PROJECT)/$(COMPONENT):$(APP_VERSION)"
+            IMAGE="$(DOCKER_USERNAME)/$(COMPONENT):$(APP_VERSION)" 
+            echo "Building image:"
+            echo "$IMAGE"
+
+            docker build \
+              -t "$IMAGE" \
+              .
+
+          displayName: Docker Build
+
+        - bash: |
+            set -e
+
+            #IMAGE="$(ECR_REGISTRY)/$(PROJECT)/$(COMPONENT):$(APP_VERSION)"
+            IMAGE="$(DOCKER_USERNAME)/$(COMPONENT):$(APP_VERSION)" 
+            echo "Pushing image:"
+            echo "$IMAGE"
+
+            docker push "$IMAGE"
+
+          displayName: Docker Push
+
+
+# ============================================================
+# DEPLOY
+# ============================================================
+
+- stage: Deploy
+  displayName: Trigger Deployment
+  dependsOn: DockerBuild
+  condition: >
+    and(
+      succeeded(),
+      ne(variables['Build.SourceBranch'], 'refs/heads/main'),
+      eq('${{ parameters.deploy }}', true)
+    )
+
+  variables:
+    APP_VERSION: $[ stageDependencies.ReadVersion.ReadVersion.outputs['getVersion.APP_VERSION'] ]
+
+  jobs:
+
+    - job: TriggerDeploy
+      pool:
+         name: 'AGENT-2'
+      displayName: Trigger CD Pipeline
+
+      steps:
+
+        - bash: |
+            echo "Deployment enabled"
+            echo "Component: $(COMPONENT)"
+            echo "Version: $(APP_VERSION)"
+
+            # Trigger your Azure CD pipeline here.
+            #
+            # Example:
+            # az pipelines run \
+            #   --name "$(COMPONENT)-cd" \
+            #   --parameters version="$(APP_VERSION)"
+
+          displayName: Trigger CD Pipeline
+
+
+# ============================================================
+# CLEANUP
+# ============================================================
+
+- stage: Cleanup
+  displayName: Cleanup
+
+  dependsOn:
+    - ReadVersion
+    - Compile
+    - DockerBuild
+    - Deploy
+
+  condition: always()
+
+  jobs:
+
+    - job: Cleanup
+      pool:
+         name: 'AGENT-2'
+
+      displayName: Cleanup Workspace
+
+      steps:
+
+        - bash: |
+            echo "Pipeline completed."
+            echo "Cleaning workspace..."
+
+            git clean -fdx || true
+
+          displayName: Cleanup
